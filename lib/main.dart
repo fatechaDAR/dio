@@ -1,7 +1,10 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
-import 'product_model.dart'; // Impor model yang tadi kita buat
+import 'product_model.dart';
+import 'product_cubit.dart';
+import 'product_state.dart';
 
 void main() {
   runApp(const MyApp());
@@ -12,18 +15,23 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Aplikasi Produk Dio',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        brightness: Brightness.dark,
+    // 1. Sediakan Cubit di level tertinggi aplikasi
+    // Kita juga langsung panggil ..fetchProducts() agar data
+    // langsung diambil saat aplikasi dibuka.
+    return BlocProvider(
+      create: (context) => ProductCubit(Dio())..fetchProducts(),
+      child: MaterialApp(
+        title: 'nge tesss si dio',
+        theme: ThemeData(
+          primarySwatch: Colors.red,
+          brightness: Brightness.dark,
+        ),
+        home: const HomePage(),
       ),
-      home: const HomePage(),
     );
   }
 }
 
-// --- Halaman Utama (List, Search, Error Handling) ---
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -32,87 +40,49 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final Dio _dio = Dio();
-  List<Product> _allProducts = []; // Menyimpan semua produk dari API
-  List<Product> _displayedProducts = []; // Produk yang ditampilkan (hasil filter)
-  bool _isLoading = true;
-  String? _error;
+  // Controller untuk text field pencarian
+  final _searchController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _fetchProducts();
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
-
   
-  Future<void> _fetchProducts() async {
-    try {
-      final response = await _dio.get('https://fakestoreapi.com/products');
-      
-      if (response.statusCode == 200) {
-        final List<dynamic> data = response.data;
-        setState(() {
-          _allProducts = data.map((json) => Product.fromJson(json)).toList();
-          _displayedProducts = _allProducts; 
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _error = 'Gagal memuat data: Status ${response.statusCode}';
-          _isLoading = false;
-        });
-      }
-    } on DioException catch (e) {
-      // Menangani error koneksi atau Dio
-      setState(() {
-        _error = 'Error jaringan: ${e.message}';
-        _isLoading = false;
-      });
-    } catch (e) {
-      // Menangani error lainnya
-      setState(() {
-        _error = 'Terjadi error: $e';
-        _isLoading = false;
-      });
-    }
-  }
-
-  // 2. Fitur Pencarian Sederhana
-  void _filterProducts(String query) {
-    setState(() {
-      _displayedProducts = _allProducts
-          .where((product) =>
-              product.title.toLowerCase().contains(query.toLowerCase()))
-          .toList();
-    });
-  }
-
-  Widget _buildBody() {
-    // Tampilkan loading
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    // Tampilkan error (Error Handling)
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Text('Error: $_error', style: const TextStyle(color: Colors.red)),
+  // Widget untuk search bar
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (query) {
+          // Panggil fungsi filter di Cubit setiap kali teks berubah
+          context.read<ProductCubit>().filterProducts(query);
+        },
+        decoration: InputDecoration(
+          hintText: 'Cari produk...',
+          prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.black.withOpacity(0.1),
         ),
-      );
-    }
-    
-    // Tampilkan jika hasil pencarian kosong
-    if (_displayedProducts.isEmpty) {
+      ),
+    );
+  }
+
+  // Widget untuk menampilkan list produk
+  Widget _buildProductList(List<Product> products) {
+    if (products.isEmpty) {
       return const Center(child: Text('Produk tidak ditemukan.'));
     }
 
-    // Tampilkan List Produk (ListView)
     return ListView.builder(
-      itemCount: _displayedProducts.length,
+      itemCount: products.length,
       itemBuilder: (context, index) {
-        final product = _displayedProducts[index];
+        final product = products[index];
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: ListTile(
@@ -121,13 +91,11 @@ class _HomePageState extends State<HomePage> {
               width: 50,
               height: 50,
               fit: BoxFit.contain,
-              // Error builder untuk gambar jika gagal dimuat
               errorBuilder: (context, error, stackTrace) =>
                   const Icon(Icons.broken_image, size: 50),
             ),
             title: Text(product.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text('\$${product.price.toStringAsFixed(2)}'),
-            // 3. Navigasi ke Halaman Detail
             onTap: () {
               Navigator.push(
                 context,
@@ -146,38 +114,76 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Daftar Produk'),
+        title: const Text('tessssssss bloc - cubit'),
+        // Tampilkan search bar di sini
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(kToolbarHeight),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              onChanged: _filterProducts, // Memanggil fungsi search setiap ada perubahan teks
-              decoration: InputDecoration(
-                hintText: 'Cari produk...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.black.withOpacity(0.1),
-              ),
-            ),
-          ),
+          child: _buildSearchBar(),
         ),
       ),
-      body: _buildBody(),
+      // 2. Gunakan BlocConsumer
+      // (Gabungan BlocListener dan BlocBuilder, seperti di video)
+      body: BlocConsumer<ProductCubit, ProductState>(
+        // --- LISTENER: Untuk aksi sekali jalan (spt SnackBar) ---
+        listener: (context, state) {
+          if (state is ProductError) {
+            // Tampilkan SnackBar jika state-nya Error
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
+        // --- BUILDER: Untuk membangun/menggambar UI ---
+        builder: (context, state) {
+          // Tentukan widget apa yang tampil berdasarkan state
+          
+          // 3. Jika state-nya Loading
+          if (state is ProductLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          // 4. Jika state-nya Sukses (Loaded)
+          if (state is ProductLoaded) {
+            // Kita ambil data produk dari state
+            return _buildProductList(state.filteredProducts);
+          }
+
+          // 5. Jika state-nya Error (tampilkan pesan)
+          if (state is ProductError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(state.message, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      // Coba panggil API lagi
+                      context.read<ProductCubit>().fetchProducts();
+                    }, 
+                    child: const Text('Coba Lagi'),
+                  )
+                ],
+              ),
+            );
+          }
+
+          // 6. Jika state-nya Initial (awal)
+          return const Center(child: Text('Memulai...'));
+        },
+      ),
     );
   }
 }
 
-// --- Halaman Detail ---
+
 class DetailPage extends StatelessWidget {
   final Product product;
-
   const DetailPage({super.key, required this.product});
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
