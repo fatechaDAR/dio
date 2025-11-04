@@ -2,36 +2,48 @@
 import 'package:equatable/equatable.dart';
 import 'product_model.dart'; 
 
-// abstract class agar bisa di-extend
 abstract class ProductState extends Equatable {
   const ProductState();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => []; // Ubah ke List<Object?>
 }
 
-// 1. Status Awal: Belum terjadi apa-apa
 class ProductInitial extends ProductState {}
 
-// 2. Status Loading: Sedang mengambil data dari API
 class ProductLoading extends ProductState {}
 
-// 3. Status Sukses: Data berhasil didapat
 class ProductLoaded extends ProductState {
-  // Simpan data produk di dalam state ini
   final List<Product> allProducts;
   final List<Product> filteredProducts;
+  
+  // TAMBAHKAN INI: Lacak produk yang sedang dipilih
+  final Product? selectedProduct; 
 
   const ProductLoaded({
     required this.allProducts,
     required this.filteredProducts,
+    this.selectedProduct, // Tambahkan di constructor
   });
 
   @override
-  List<Object> get props => [allProducts, filteredProducts];
+  // Tambahkan selectedProduct ke props
+  List<Object?> get props => [allProducts, filteredProducts, selectedProduct];
+
+  // Tambahkan copyWith untuk mempermudah update state
+  ProductLoaded copyWith({
+    List<Product>? allProducts,
+    List<Product>? filteredProducts,
+    Product? selectedProduct,
+  }) {
+    return ProductLoaded(
+      allProducts: allProducts ?? this.allProducts,
+      filteredProducts: filteredProducts ?? this.filteredProducts,
+      selectedProduct: selectedProduct ?? this.selectedProduct,
+    );
+  }
 }
 
-// 4. Status Error: Terjadi kegagalan
 class ProductError extends ProductState {
   final String message;
 

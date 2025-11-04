@@ -15,9 +15,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Sediakan Cubit di level tertinggi aplikasi
-    // Kita juga langsung panggil ..fetchProducts() agar data
-    // langsung diambil saat aplikasi dibuka.
     return BlocProvider(
       create: (context) => ProductCubit(Dio())..fetchProducts(),
       child: MaterialApp(
@@ -26,6 +23,8 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.red,
           brightness: Brightness.dark,
         ),
+        // Kita tidak lagi butuh DetailPage sebagai route terpisah
+        // karena akan kita gabung, tapi kita tetap butuh class-nya
         home: const HomePage(),
       ),
     );
@@ -40,7 +39,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // Controller untuk text field pencarian
   final _searchController = TextEditingController();
 
   @override
@@ -49,14 +47,12 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
   
-  // Widget untuk search bar
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: TextField(
         controller: _searchController,
         onChanged: (query) {
-          // Panggil fungsi filter di Cubit setiap kali teks berubah
           context.read<ProductCubit>().filterProducts(query);
         },
         decoration: InputDecoration(
@@ -73,8 +69,9 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Widget untuk menampilkan list produk
-  Widget _buildProductList(List<Product> products) {
+  // --- MODIFIKASI WIDGET INI ---
+  // Tambahkan 'isLargeScreen' untuk menentukan aksi 'onTap'
+  Widget _buildProductList(List<Product> products, bool isLargeScreen) {
     if (products.isEmpty) {
       return const Center(child: Text('Produk tidak ditemukan.'));
     }
@@ -97,12 +94,19 @@ class _HomePageState extends State<HomePage> {
             title: Text(product.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text('\$${product.price.toStringAsFixed(2)}'),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => DetailPage(product: product),
-                ),
-              );
+              // --- INI LOGIKA ADAPTIF-NYA ---
+              if (isLargeScreen) {
+                // Jika layar besar, panggil cubit untuk update state
+                context.read<ProductCubit>().selectProduct(product);
+              } else {
+                // Jika layar kecil, navigasi seperti biasa
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DetailPage(product: product),
+                  ),
+                );
+              }
             },
           ),
         );
@@ -115,19 +119,14 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('tessssssss bloc - cubit'),
-        // Tampilkan search bar di sini
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(kToolbarHeight),
           child: _buildSearchBar(),
         ),
       ),
-      // 2. Gunakan BlocConsumer
-      // (Gabungan BlocListener dan BlocBuilder, seperti di video)
       body: BlocConsumer<ProductCubit, ProductState>(
-        // --- LISTENER: Untuk aksi sekali jalan (spt SnackBar) ---
         listener: (context, state) {
           if (state is ProductError) {
-            // Tampilkan SnackBar jika state-nya Error
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
@@ -136,43 +135,74 @@ class _HomePageState extends State<HomePage> {
             );
           }
         },
-        // --- BUILDER: Untuk membangun/menggambar UI ---
         builder: (context, state) {
-          // Tentukan widget apa yang tampil berdasarkan state
-          
-          // 3. Jika state-nya Loading
-          if (state is ProductLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          // --- GUNAKAN LAYOUTBUILDER UNTUK JADI RESPONSIVE/ADAPTIVE ---
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              // Tentukan breakpoint kita. 600px adalah standar umum.
+              final isLargeScreen = constraints.maxWidth >= 600;
 
-          // 4. Jika state-nya Sukses (Loaded)
-          if (state is ProductLoaded) {
-            // Kita ambil data produk dari state
-            return _buildProductList(state.filteredProducts);
-          }
+              if (state is ProductLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          // 5. Jika state-nya Error (tampilkan pesan)
-          if (state is ProductError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(state.message, style: const TextStyle(color: Colors.red)),
-                  const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: () {
-                      // Coba panggil API lagi
-                      context.read<ProductCubit>().fetchProducts();
-                    }, 
-                    child: const Text('Coba Lagi'),
-                  )
-                ],
-              ),
-            );
-          }
+              if (state is ProductLoaded) {
+                // --- INI BAGIAN ADAPTIVE UTAMA ---
+                if (isLargeScreen) {
+                  // --- LAYOUT TABLET/WEB ---
+                  return Row(
+                    children: [
+                      // Bagian Kiri (List) - Responsif (flex: 1)
+                      Expanded(
+                        flex: 1,
+                        child: _buildProductList(
+                          state.filteredProducts,
+                          isLargeScreen, // true
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      // Bagian Kanan (Detail) - Responsif (flex: 2)
+                      Expanded(
+                        flex: 2,
+                        child: state.selectedProduct != null
+                            ? DetailPage(product: state.selectedProduct!)
+                            : const Center(
+                                child: Text('Pilih produk dari daftar...'),
+                              ),
+                      ),
+                    ],
+                  );
+                } else {
+                  // --- LAYOUT HP (KECIL) ---
+                  // Tampilan standar, hanya list
+                  return _buildProductList(
+                    state.filteredProducts,
+                    isLargeScreen, // false
+                  );
+                }
+              }
 
-          // 6. Jika state-nya Initial (awal)
-          return const Center(child: Text('Memulai...'));
+              if (state is ProductError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(state.message, style: const TextStyle(color: Colors.red)),
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                        onPressed: () {
+                          context.read<ProductCubit>().fetchProducts();
+                        },
+                        child: const Text('Coba Lagi'),
+                      )
+                    ],
+                  ),
+                );
+              }
+
+              return const Center(child: Text('Memulai...'));
+            },
+          );
         },
       ),
     );
@@ -180,6 +210,8 @@ class _HomePageState extends State<HomePage> {
 }
 
 
+// --- Class DetailPage tidak perlu diubah SAMA SEKALI ---
+// Dia hanya menerima produk dan menampilkannya.
 class DetailPage extends StatelessWidget {
   final Product product;
   const DetailPage({super.key, required this.product});
@@ -187,6 +219,7 @@ class DetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // AppBar ini hanya akan muncul jika di-push di layar kecil
       appBar: AppBar(
         title: Text(product.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
