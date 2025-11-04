@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'product_model.dart';
 import 'product_cubit.dart';
 import 'product_state.dart';
+import 'package:sizer/sizer.dart'; // Pastikan import ini ada
 
 void main() {
   runApp(const MyApp());
@@ -17,15 +18,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) => ProductCubit(Dio())..fetchProducts(),
-      child: MaterialApp(
-        title: 'nge tesss si dio',
-        theme: ThemeData(
-          primarySwatch: Colors.red,
-          brightness: Brightness.dark,
-        ),
-        // Kita tidak lagi butuh DetailPage sebagai route terpisah
-        // karena akan kita gabung, tapi kita tetap butuh class-nya
-        home: const HomePage(),
+      child: Sizer(
+        builder: (context, orientation, deviceType) {
+          return MaterialApp(
+            title: 'nge tesss si dio',
+            theme: ThemeData(
+              primarySwatch: Colors.red,
+              brightness: Brightness.dark,
+            ),
+            home: const HomePage(),
+          );
+        },
       ),
     );
   }
@@ -46,10 +49,11 @@ class _HomePageState extends State<HomePage> {
     _searchController.dispose();
     super.dispose();
   }
-  
+
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      // --- SIZER --- Ganti '8.0'
+      padding: EdgeInsets.all(2.w),
       child: TextField(
         controller: _searchController,
         onChanged: (query) {
@@ -59,7 +63,8 @@ class _HomePageState extends State<HomePage> {
           hintText: 'Cari produk...',
           prefixIcon: const Icon(Icons.search),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            // --- SIZER --- Ganti '12'
+            borderRadius: BorderRadius.circular(12.sp),
             borderSide: BorderSide.none,
           ),
           filled: true,
@@ -69,8 +74,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- MODIFIKASI WIDGET INI ---
-  // Tambahkan 'isLargeScreen' untuk menentukan aksi 'onTap'
   Widget _buildProductList(List<Product> products, bool isLargeScreen) {
     if (products.isEmpty) {
       return const Center(child: Text('Produk tidak ditemukan.'));
@@ -81,25 +84,31 @@ class _HomePageState extends State<HomePage> {
       itemBuilder: (context, index) {
         final product = products[index];
         return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          // --- SIZER --- Ganti 'horizontal: 16, vertical: 8'
+          margin: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.h),
           child: ListTile(
             leading: Image.network(
               product.image,
-              width: 50,
-              height: 50,
+              // --- SIZER --- Ganti 'width: 50, height: 50'
+              // Kita pakai 12.w (12% lebar) agar proporsional
+              width: 12.w,
+              height: 12.w,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.broken_image, size: 50),
+                  // --- SIZER --- Ganti 'size: 50'
+                  Icon(Icons.broken_image, size: 12.w),
             ),
             title: Text(product.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('\$${product.price.toStringAsFixed(2)}'),
+            // --- SIZER --- Ganti font size hardcode
+            // Kita pakai .sp (Scalable Pixels) untuk teks
+            subtitle: Text(
+              '\$${product.price.toStringAsFixed(2)}',
+              style: TextStyle(fontSize: 12.sp),
+            ),
             onTap: () {
-              // --- INI LOGIKA ADAPTIF-NYA ---
               if (isLargeScreen) {
-                // Jika layar besar, panggil cubit untuk update state
                 context.read<ProductCubit>().selectProduct(product);
               } else {
-                // Jika layar kecil, navigasi seperti biasa
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -120,7 +129,9 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('tessssssss bloc - cubit'),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight),
+          // --- SIZER --- Ganti 'kToolbarHeight'
+          // kToolbarHeight itu ~56. Kita buat responsif pakai 8% tinggi layar
+          preferredSize: Size.fromHeight(8.h),
           child: _buildSearchBar(),
         ),
       ),
@@ -136,10 +147,9 @@ class _HomePageState extends State<HomePage> {
           }
         },
         builder: (context, state) {
-          // --- GUNAKAN LAYOUTBUILDER UNTUK JADI RESPONSIVE/ADAPTIVE ---
           return LayoutBuilder(
             builder: (context, constraints) {
-              // Tentukan breakpoint kita. 600px adalah standar umum.
+              // Breakpoint 600px ini tetap kita pakai untuk Adaptive
               final isLargeScreen = constraints.maxWidth >= 600;
 
               if (state is ProductLoading) {
@@ -147,37 +157,36 @@ class _HomePageState extends State<HomePage> {
               }
 
               if (state is ProductLoaded) {
-                // --- INI BAGIAN ADAPTIVE UTAMA ---
                 if (isLargeScreen) {
-                  // --- LAYOUT TABLET/WEB ---
                   return Row(
                     children: [
-                      // Bagian Kiri (List) - Responsif (flex: 1)
                       Expanded(
                         flex: 1,
                         child: _buildProductList(
                           state.filteredProducts,
-                          isLargeScreen, // true
+                          isLargeScreen,
                         ),
                       ),
                       const VerticalDivider(width: 1),
-                      // Bagian Kanan (Detail) - Responsif (flex: 2)
                       Expanded(
                         flex: 2,
                         child: state.selectedProduct != null
                             ? DetailPage(product: state.selectedProduct!)
-                            : const Center(
-                                child: Text('Pilih produk dari daftar...'),
+                            : Center(
+                                // --- SIZER --- Ganti font size
+                                child: Text(
+                                  'Pilih produk dari daftar...',
+                                  style: TextStyle(fontSize: 14.sp),
+                                ),
                               ),
                       ),
                     ],
                   );
                 } else {
-                  // --- LAYOUT HP (KECIL) ---
-                  // Tampilan standar, hanya list
+                  // Layout HP (Kecil)
                   return _buildProductList(
                     state.filteredProducts,
-                    isLargeScreen, // false
+                    isLargeScreen,
                   );
                 }
               }
@@ -188,7 +197,7 @@ class _HomePageState extends State<HomePage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(state.message, style: const TextStyle(color: Colors.red)),
-                      const SizedBox(height: 10),
+                      SizedBox(height: 1.h), // --- SIZER ---
                       ElevatedButton(
                         onPressed: () {
                           context.read<ProductCubit>().fetchProducts();
@@ -209,58 +218,69 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-
-// --- Class DetailPage tidak perlu diubah SAMA SEKALI ---
-// Dia hanya menerima produk dan menampilkannya.
+// --- Halaman Detail juga kita ubah ---
 class DetailPage extends StatelessWidget {
   final Product product;
   const DetailPage({super.key, required this.product});
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBar ini hanya akan muncul jika di-push di layar kecil
       appBar: AppBar(
         title: Text(product.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        // --- SIZER --- Ganti '16.0'
+        padding: EdgeInsets.all(4.w),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
               child: Image.network(
                 product.image,
-                height: 250,
+                // --- SIZER --- Ganti '250'
+                // Kita set 30% dari tinggi layar
+                height: 30.h,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.broken_image, size: 250),
+                    // --- SIZER --- Ganti '250'
+                    Icon(Icons.broken_image, size: 30.h),
               ),
             ),
-            const SizedBox(height: 20),
+            // --- SIZER --- Ganti '20'
+            SizedBox(height: 2.h),
             Text(
               product.title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              // --- SIZER --- Ganti TextTheme
+              style: TextStyle(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 10),
+            // --- SIZER --- Ganti '10'
+            SizedBox(height: 1.h),
             Text(
               '\$${product.price.toStringAsFixed(2)}',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
-                  ),
+              // --- SIZER --- Ganti TextTheme
+              style: TextStyle(
+                fontSize: 22.sp,
+                color: Colors.greenAccent,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 20),
+            // --- SIZER --- Ganti '20'
+            SizedBox(height: 2.h),
             Text(
               'Deskripsi Produk',
-              style: Theme.of(context).textTheme.titleLarge,
+              // --- SIZER --- Ganti TextTheme
+              style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 10),
+            // --- SIZER --- Ganti '10'
+            SizedBox(height: 1.h),
             Text(
               product.description,
-              style: Theme.of(context).textTheme.bodyMedium,
+              // --- SIZER --- Ganti TextTheme
+              style: TextStyle(fontSize: 12.sp),
             ),
           ],
         ),
